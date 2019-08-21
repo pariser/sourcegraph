@@ -851,6 +851,7 @@ export async function injectCodeIntelligenceToCodeHost(
     const sourcegraphURL = await observeSourcegraphURL(isExtension)
         .pipe(take(1))
         .toPromise()
+    console.log('sourcegraphURL', sourcegraphURL)
     const { platformContext, extensionsController } = initializeExtensions(codeHost, sourcegraphURL, isExtension)
     const telemetryService = new EventLogger(isExtension, platformContext.requestGraphQL)
     subscriptions.add(extensionsController)

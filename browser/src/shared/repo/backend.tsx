@@ -35,6 +35,7 @@ export const resolveRepo = memoizeObservable(
         }).pipe(
             map(dataOrThrowErrors),
             map(({ repository }) => {
+                console.log(`ResolveRepo name="${rawRepoName}" response=${JSON.stringify(repository)}`)
                 if (!repository) {
                     throw new RepoNotFoundError(rawRepoName)
                 }

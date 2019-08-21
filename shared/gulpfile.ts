@@ -5,7 +5,7 @@ import gulp from 'gulp'
 import $RefParser from 'json-schema-ref-parser'
 import { compile as compileJSONSchema } from 'json-schema-to-typescript'
 import mkdirp from 'mkdirp-promise'
-import { readFile, writeFile } from 'mz/fs'
+import { readFile, writeFile, readdir } from 'mz/fs'
 import path from 'path'
 import { format, resolveConfig } from 'prettier'
 import { draftV7resolver } from './draftV7Resolver'
@@ -58,28 +58,30 @@ export async function schema(): Promise<void> {
     await mkdirp(outputDir)
     const schemaDir = path.join(__dirname, '..', 'schema')
     await Promise.all(
-        ['json-schema-draft-07', 'settings', 'critical', 'site'].map(async file => {
-            let schema = await readFile(path.join(schemaDir, `${file}.schema.json`), 'utf8')
-            // HACK: Rewrite absolute $refs to be relative. They need to be absolute for Monaco to resolve them
-            // when the schema is in a oneOf (to be merged with extension schemas).
-            schema = schema.replace(
-                /https:\/\/sourcegraph\.com\/v1\/settings\.schema\.json#\/definitions\//g,
-                '#/definitions/'
-            )
+        (await readdir(schemaDir))
+            .filter(file => file.endsWith('.schema.json'))
+            .map(async file => {
+                let schema = await readFile(path.join(schemaDir, file), 'utf8')
+                // HACK: Rewrite absolute $refs to be relative. They need to be absolute for Monaco to resolve them
+                // when the schema is in a oneOf (to be merged with extension schemas).
+                schema = schema.replace(
+                    /https:\/\/sourcegraph\.com\/v1\/settings\.schema\.json#\/definitions\//g,
+                    '#/definitions/'
+                )
 
-            const types = await compileJSONSchema(JSON.parse(schema), 'settings.schema', {
-                cwd: schemaDir,
-                $refOptions: {
-                    resolve: {
-                        draftV7resolver,
-                        // there should be no reason to make network calls during this process,
-                        // and if there are we've broken env for offline devs/increased dev startup time
-                        http: false,
-                    } as $RefParser.Options['resolve'],
-                },
+                const types = await compileJSONSchema(JSON.parse(schema), 'settings.schema', {
+                    cwd: schemaDir,
+                    $refOptions: {
+                        resolve: {
+                            draftV7resolver,
+                            // there should be no reason to make network calls during this process,
+                            // and if there are we've broken env for offline devs/increased dev startup time
+                            http: false,
+                        } as $RefParser.Options['resolve'],
+                    },
+                })
+                await writeFile(path.join(outputDir, `${file}.schema.d.ts`), types)
             })
-            await writeFile(path.join(outputDir, `${file}.schema.d.ts`), types)
-        })
     )
 }
 

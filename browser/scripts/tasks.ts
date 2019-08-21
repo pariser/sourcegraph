@@ -90,6 +90,10 @@ function writeManifest(env: BuildEnv, browser: Browser, writeDir: string): void 
         ...omit(extensionInfo[env], BROWSER_BLACKLIST[browser]),
     }
 
+    if (process.env.EXTENSION_PERMISSIONS_ALL_URLS) {
+        manifest.permissions.push('<all_urls>')
+    }
+
     if (browser === 'firefox') {
         manifest.permissions.push('<all_urls>')
         delete manifest.storage

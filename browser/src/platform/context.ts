@@ -1,5 +1,5 @@
 import { combineLatest, merge, Observable, ReplaySubject } from 'rxjs'
-import { map, publishReplay, refCount, switchMap, take } from 'rxjs/operators'
+import { map, publishReplay, refCount, switchMap, take, tap } from 'rxjs/operators'
 import { PrivateRepoPublicSourcegraphComError } from '../../../shared/src/backend/errors'
 import { GraphQLResult, requestGraphQL as requestGraphQLCommon } from '../../../shared/src/graphql/graphql'
 import * as GQL from '../../../shared/src/graphql/schema'
@@ -17,6 +17,7 @@ import { DEFAULT_SOURCEGRAPH_URL, observeSourcegraphURL } from '../shared/util/c
 import { createExtensionHost } from './extensionHost'
 import { editClientSettings, fetchViewerSettings, mergeCascades, storageSettingsCascade } from './settings'
 
+let id = 1
 /**
  * Creates the {@link PlatformContext} for the browser extension.
  */
@@ -34,21 +35,33 @@ export function createPlatformContext(
         request: string
         variables: {}
         mightContainPrivateInfo: boolean
-    }): Observable<GraphQLResult<T>> =>
-        observeSourcegraphURL(isExtension).pipe(
+    }): Observable<GraphQLResult<T>> => {
+        id++
+        const nameMatch = request.match(/^\s*(?:query|mutation)\s+(\w+)/)
+        return observeSourcegraphURL(isExtension).pipe(
             take(1),
             switchMap(sourcegraphURL => {
+                console.log(
+                    'GQL request',
+                    id,
+                    nameMatch && nameMatch[1],
+                    sourcegraphURL,
+                    window.SOURCEGRAPH_URL,
+                    JSON.stringify(variables)
+                )
                 if (mightContainPrivateInfo && sourcegraphURL === DEFAULT_SOURCEGRAPH_URL) {
                     // If we can't determine the code host context, assume the current repository is private.
                     const privateRepository = getContext ? getContext().privateRepository : true
                     if (privateRepository) {
-                        const nameMatch = request.match(/^\s*(?:query|mutation)\s+(\w+)/)
                         throw new PrivateRepoPublicSourcegraphComError(nameMatch ? nameMatch[1] : '')
                     }
                 }
                 if (isExtension) {
                     // In the browser extension, send all GraphQL requests from the background page.
-                    return background.requestGraphQL<T>({ request, variables })
+                    return background.requestGraphQL<T>({ request, variables }).then(res => {
+                        console.log('GQL response', id, JSON.stringify(res))
+                        return res
+                    })
                 }
                 return requestGraphQLCommon<T>({
                     request,
@@ -63,6 +76,7 @@ export function createPlatformContext(
                 })
             })
         )
+    }
 
     const context: PlatformContext = {
         /**
