@@ -325,7 +325,32 @@ func (s *Syncer) sourced(ctx context.Context) ([]*Repo, error) {
 	ctx, cancel := context.WithTimeout(ctx, sourceTimeout)
 	defer cancel()
 
-	return srcs.ListRepos(ctx)
+	results := make(chan *SourceResult)
+	done := make(chan struct{})
+	go func() {
+		srcs.ListRepos(ctx, results)
+		done <- struct{}{}
+	}()
+	go func() {
+		<-done
+		close(results)
+	}()
+
+	var repos []*Repo
+	errs := new(MultiSourceError)
+
+	for result := range results {
+		if result.Err != nil {
+			for _, extSvc := range result.Source.ExternalServices() {
+				errs.Append(&SourceError{Err: result.Err, ExtSvc: extSvc})
+			}
+			continue
+		}
+
+		repos = append(repos, result.Repo)
+	}
+
+	return repos, errs.ErrorOrNil()
 }
 
 func (s *Syncer) setOrResetLastSyncErr(perr *error) {
