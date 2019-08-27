@@ -153,11 +153,22 @@ func (s *Syncer) StreamingSync(ctx context.Context) (diff Diff, err error) {
 	}
 
 	errs := new(MultiSourceError)
+	byID := make(map[api.ExternalRepoSpec]*Repo)
+	byName := make(map[string]*Repo)
+	combinedDiff := Diff{}
 
-	combinedModified := make(map[uint32]*Repo)
-	combinedAdded := make(map[uint32]*Repo)
-	combinedUnmodified := make(map[uint32]*Repo)
-	combinedDeleted := make(map[uint32]*Repo)
+	var stored Repos
+	if stored, err = store.ListRepos(ctx, StoreListReposArgs{}); err != nil {
+		return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.list-repos")
+	}
+	sort.Stable(byExternalRepoSpecSet(stored))
+
+	seenID := make(map[api.ExternalRepoSpec]bool, len(stored))
+	seenName := make(map[string]bool, len(stored))
+
+	combinedAdded := make(map[api.ExternalRepoSpec]*Repo)
+	combinedModified := make(map[api.ExternalRepoSpec]*Repo)
+	combinedUnmodified := make(map[api.ExternalRepoSpec]*Repo)
 
 	for result := range sourced {
 		if result.Err != nil {
@@ -167,75 +178,121 @@ func (s *Syncer) StreamingSync(ctx context.Context) (diff Diff, err error) {
 			continue
 		}
 
-		args := StoreListReposArgs{
-			Names:         []string{result.Repo.Name},
-			ExternalRepos: []api.ExternalRepoSpec{result.Repo.ExternalRepo},
-			UseOr:         true,
-		}
-		storedSubset, err := store.ListRepos(ctx, args)
-		if err != nil {
-			return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.list-repos")
+		r := result.Repo
+		// fmt.Printf("streaming-sync. loop body. r.Name=%s\n", r.Name)
+
+		diff := Diff{}
+
+		var merged bool
+		if !r.ExternalRepo.IsSet() {
+			panic(fmt.Errorf("%s has no valid external repo spec: %s", r.Name, r.ExternalRepo))
+		} else if old := byID[r.ExternalRepo]; old != nil {
+			// fmt.Printf("merging\n\t%q (%#v)\nand\n\t%q (%#v)\n", old.Name, old.ExternalRepo, r.Name, r.ExternalRepo)
+			merge(old, r)
+			merged = true
+		} else {
+			byID[r.ExternalRepo] = r
 		}
 
-		diff = NewDiff(Repos([]*Repo{result.Repo}), storedSubset)
+		if !merged {
+			name := strings.ToLower(r.Name)
+			if old := byName[name]; old == nil {
+				byName[name] = r
+			} else {
+				keep, discard := pick(r, old)
+				byName[name] = keep
+				delete(byID, discard.ExternalRepo)
+			}
+		}
+
+		// fmt.Printf("byID:\n")
+		// for extRepoSpec, _ := range byID {
+		// 	// fmt.Printf("\t- %#v\n", extRepoSpec)
+		// }
+		for _, old := range stored {
+			newRepo := byID[old.ExternalRepo]
+
+			if newRepo == nil && old.ExternalRepo.ID == "" && !seenName[old.Name] {
+				newRepo = byName[strings.ToLower(old.Name)]
+			}
+
+			if newRepo == nil {
+				// fmt.Println("deleted")
+				// diff.Deleted = append(diff.Deleted, old)
+			} else if old.Update(newRepo) {
+				// fmt.Println("modified")
+				diff.Modified = append(diff.Modified, old)
+				combinedModified[old.ExternalRepo] = old
+			} else {
+				// fmt.Println("unmodified")
+				diff.Unmodified = append(diff.Unmodified, old)
+				combinedUnmodified[old.ExternalRepo] = old
+			}
+
+			seenID[old.ExternalRepo] = true
+			seenName[old.Name] = true
+		}
+
+		for _, r := range byID {
+			if !seenID[r.ExternalRepo] {
+				// fmt.Println("added")
+				diff.Added = append(diff.Added, r)
+				combinedAdded[r.ExternalRepo] = r
+			}
+		}
+		// fmt.Printf("iteration diff: ")
+		// printDiff(diff)
 
 		upserts := s.upserts(diff)
 
 		if err = store.UpsertRepos(ctx, upserts...); err != nil {
-			return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.upsert-repos")
-		}
-
-		for _, repo := range diff.Deleted {
-			combinedDeleted[repo.ID] = repo
-		}
-
-		for _, repo := range diff.Modified {
-			combinedModified[repo.ID] = repo
-		}
-
-		for _, repo := range diff.Added {
-			combinedAdded[repo.ID] = repo
-		}
-
-		for _, repo := range diff.Unmodified {
-			combinedUnmodified[repo.ID] = repo
+			return Diff{}, errors.Wrap(err, "syncer.syncsubset.store.upsert-repos")
 		}
 	}
 
-	combinedDiff := Diff{
-		Modified:   make([]*Repo, 0, len(combinedModified)),
-		Added:      make([]*Repo, 0, len(combinedAdded)),
-		Unmodified: make([]*Repo, 0, len(combinedUnmodified)),
-		Deleted:    make([]*Repo, 0, len(combinedDeleted)),
+	for id, r := range combinedModified {
+		combinedDiff.Modified = append(combinedDiff.Modified, r)
+		if _, ok := combinedUnmodified[id]; ok {
+			delete(combinedUnmodified, id)
+		}
 	}
 
-	for _, repo := range combinedDeleted {
-		combinedDiff.Deleted = append(combinedDiff.Deleted, repo)
+	for _, r := range combinedUnmodified {
+		combinedDiff.Modified = append(combinedDiff.Modified, r)
+	}
+	for _, r := range combinedAdded {
+		combinedDiff.Added = append(combinedDiff.Added, r)
 	}
 
-	for _, repo := range combinedModified {
-		combinedDiff.Modified = append(combinedDiff.Modified, repo)
-	}
+	deleteDiff := Diff{}
+	for _, old := range stored {
+		_, modified := combinedModified[old.ExternalRepo]
+		_, unmodified := combinedUnmodified[old.ExternalRepo]
+		_, added := combinedAdded[old.ExternalRepo]
 
-	for _, repo := range combinedAdded {
-		combinedDiff.Added = append(combinedDiff.Added, repo)
+		if !modified && !unmodified && !added {
+			deleteDiff.Deleted = append(deleteDiff.Deleted, old)
+			combinedDiff.Deleted = append(combinedDiff.Deleted, old)
+		}
 	}
+	upserts := s.upserts(deleteDiff)
 
-	for _, repo := range combinedUnmodified {
-		combinedDiff.Unmodified = append(combinedDiff.Unmodified, repo)
+	if err = store.UpsertRepos(ctx, upserts...); err != nil {
+		return Diff{}, errors.Wrap(err, "syncer.syncsubset.store.upsert-repos")
 	}
 
 	if s.diffs != nil {
 		s.diffs <- combinedDiff
 	}
 
+	// fmt.Printf("combinedDiff: ")
 	printDiff(combinedDiff)
 
-	keepIDs := keepIDsInDiff(combinedDiff)
-
-	if err = store.DeleteReposExcept(ctx, keepIDs...); err != nil {
-		return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.delete-repos-except")
-	}
+	// keepIDs := keepIDsInDiff(combinedDiff)
+	//
+	// if err = store.DeleteReposExcept(ctx, keepIDs...); err != nil {
+	// 	return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.delete-repos-except")
+	// }
 
 	err = errs.ErrorOrNil()
 
@@ -266,8 +323,6 @@ func keepIDsInDiff(d Diff) []uint32 {
 }
 
 func printDiff(diff Diff) {
-	fmt.Printf("-- diff -- ")
-
 	fmt.Printf("\tdeleted (%d)=", len(diff.Deleted))
 	for _, repo := range diff.Deleted {
 		fmt.Printf("%q ", repo.Name)
@@ -404,9 +459,11 @@ func NewDiff(sourced, stored []*Repo) (diff Diff) {
 
 	byID := make(map[api.ExternalRepoSpec]*Repo, len(sourced))
 	for _, r := range sourced {
+		fmt.Printf("sourced loop body. r.Name=%q\n", r.Name)
 		if !r.ExternalRepo.IsSet() {
 			panic(fmt.Errorf("%s has no valid external repo spec: %s", r.Name, r.ExternalRepo))
 		} else if old := byID[r.ExternalRepo]; old != nil {
+			fmt.Printf("merging\n\t%q (%#v)\nand\n\t%q (%#v)\n", old.Name, old.ExternalRepo, r.Name, r.ExternalRepo)
 			merge(old, r)
 		} else {
 			byID[r.ExternalRepo] = r
@@ -423,8 +480,11 @@ func NewDiff(sourced, stored []*Repo) (diff Diff) {
 		if old := byName[k]; old == nil {
 			byName[k] = r
 		} else {
+			fmt.Println("repo with same nam already seen")
+			fmt.Printf("pick between r.ID=%#v and old.ID=%#v\n", r.ID, old.ID)
 			keep, discard := pick(r, old)
 			byName[k] = keep
+			fmt.Printf("discarding discard.iD=%#v\n", discard.ID)
 			delete(byID, discard.ExternalRepo)
 		}
 	}
@@ -442,15 +502,19 @@ func NewDiff(sourced, stored []*Repo) (diff Diff) {
 
 	for _, old := range stored {
 		src := byID[old.ExternalRepo]
+
 		if src == nil && old.ExternalRepo.ID == "" && !seenName[old.Name] {
 			src = byName[strings.ToLower(old.Name)]
 		}
 
 		if src == nil {
+			fmt.Println("deleted")
 			diff.Deleted = append(diff.Deleted, old)
 		} else if old.Update(src) {
+			fmt.Println("modified")
 			diff.Modified = append(diff.Modified, old)
 		} else {
+			fmt.Println("unmodified")
 			diff.Unmodified = append(diff.Unmodified, old)
 		}
 
@@ -463,6 +527,8 @@ func NewDiff(sourced, stored []*Repo) (diff Diff) {
 			diff.Added = append(diff.Added, r)
 		}
 	}
+	fmt.Printf("syncer diff")
+	printDiff(diff)
 
 	return diff
 }
