@@ -143,6 +143,46 @@ func checkPanic(t *testing.T, msg string, f func()) {
 	f()
 }
 
+func TestHandlePatternType(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  string
+	}{
+		{"", ""},
+		{" ", ""},
+		{`a`, `"a"`},
+		{`:`, `":"`},
+		{`:=`, `":="`},
+		{`:= range`, `":= range"`},
+		{"`", "\"`\""},
+		{`'`, `"'"`},
+		{`:`, `":"`},
+		{"f:a", "f:a"},
+		{"patternType:regex", ""},
+		{"patternType:regexp", ""},
+		{"patternType:literal", ""},
+		{"patternType:regexp .*", ".*"},
+		{"patternType:regexp patternType:literal .*", `".*"`},
+		{`patternType:regexp "patternType:literal"`, `"patternType:literal"`},
+		{`patternType:regexp "patternType:regexp"`, `"patternType:regexp"`},
+		{`patternType:literal "patternType:regexp"`, `"\"patternType:regexp\""`},
+		{".* patternType:regexp .*", ".* .*"},
+		{".* patternType:regexp", ".*"},
+		{"patternType:literal .*", `".*"`},
+		{`lang:go func main`, `lang:go "func main"`},
+		{`func main lang:go`, `lang:go "func main"`},
+		{`func lang:go main`, `lang:go "func main"`},
+	}
+	for _, tc := range tcs {
+		t.Run(tc.input, func(t *testing.T) {
+			out := handlePatternType(tc.input)
+			if out != tc.want {
+				t.Errorf("handlePatternType(%q) = %q, want %q", tc.input, out, tc.want)
+			}
+		})
+	}
+}
+
 func TestTokenize(t *testing.T) {
 	tcs := []struct {
 		input string
@@ -167,9 +207,11 @@ func TestTokenize(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		toks := tokenize(tc.input)
-		if !reflect.DeepEqual(toks, tc.want) {
-			t.Errorf("tokenize(%q) = %q, want %q", tc.input, toks, tc.want)
-		}
+		t.Run(tc.input, func(t *testing.T) {
+			toks := tokenize(tc.input)
+			if !reflect.DeepEqual(toks, tc.want) {
+				t.Errorf("tokenize(%q) = %q, want %q", tc.input, toks, tc.want)
+			}
+		})
 	}
 }

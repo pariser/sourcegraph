@@ -127,6 +127,8 @@ func handlePatternType(input string) string {
 		switch t {
 		case "patternType:regex":
 			isRegex = true
+		case "patternType:regexp":
+			isRegex = true
 		case "patternType:literal":
 			isRegex = false
 		default:
@@ -162,7 +164,7 @@ func handlePatternType(input string) string {
 }
 
 // tokenize returns a slice of the double-quoted strings and contiguous chunks
-// of non-whitespace in the input string.
+// of non-whitespace.
 func tokenize(input string) []string {
 	var toks []string
 	s := Scanner{r: bufio.NewReader(strings.NewReader(input))}
