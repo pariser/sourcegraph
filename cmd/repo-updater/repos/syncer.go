@@ -124,6 +124,169 @@ func (s *Syncer) Sync(ctx context.Context) (diff Diff, err error) {
 	return diff, nil
 }
 
+// StreamingSync streams repositories when syncing
+func (s *Syncer) StreamingSync(ctx context.Context) (diff Diff, err error) {
+	ctx, save := s.observe(ctx, "Syncer.StreamingSync", "")
+	defer save(&diff, &err)
+	defer s.setOrResetLastSyncErr(&err)
+
+	if s.FailFullSync {
+		return Diff{}, errors.New("Syncer is not enabled")
+	}
+
+	sourcedCtx, cancel := context.WithTimeout(ctx, sourceTimeout)
+	defer cancel()
+
+	sourced, err := s.asyncSourced(sourcedCtx)
+	if err != nil {
+		return Diff{}, errors.Wrap(err, "syncer.streaming-sync.async-sourced")
+	}
+
+	store := s.store
+	if tr, ok := s.store.(Transactor); ok {
+		var txs TxStore
+		if txs, err = tr.Transact(ctx); err != nil {
+			return Diff{}, errors.Wrap(err, "syncer.streaming-sync.transact")
+		}
+		defer txs.Done(&err)
+		store = txs
+	}
+
+	errs := new(MultiSourceError)
+
+	combinedModified := make(map[uint32]*Repo)
+	combinedAdded := make(map[uint32]*Repo)
+	combinedUnmodified := make(map[uint32]*Repo)
+	combinedDeleted := make(map[uint32]*Repo)
+
+	for result := range sourced {
+		if result.Err != nil {
+			for _, extSvc := range result.Source.ExternalServices() {
+				errs.Append(&SourceError{Err: result.Err, ExtSvc: extSvc})
+			}
+			continue
+		}
+
+		args := StoreListReposArgs{
+			Names:         []string{result.Repo.Name},
+			ExternalRepos: []api.ExternalRepoSpec{result.Repo.ExternalRepo},
+			UseOr:         true,
+		}
+		storedSubset, err := store.ListRepos(ctx, args)
+		if err != nil {
+			return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.list-repos")
+		}
+
+		diff = NewDiff(Repos([]*Repo{result.Repo}), storedSubset)
+
+		upserts := s.upserts(diff)
+
+		if err = store.UpsertRepos(ctx, upserts...); err != nil {
+			return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.upsert-repos")
+		}
+
+		for _, repo := range diff.Deleted {
+			combinedDeleted[repo.ID] = repo
+		}
+
+		for _, repo := range diff.Modified {
+			combinedModified[repo.ID] = repo
+		}
+
+		for _, repo := range diff.Added {
+			combinedAdded[repo.ID] = repo
+		}
+
+		for _, repo := range diff.Unmodified {
+			combinedUnmodified[repo.ID] = repo
+		}
+	}
+
+	combinedDiff := Diff{
+		Modified:   make([]*Repo, 0, len(combinedModified)),
+		Added:      make([]*Repo, 0, len(combinedAdded)),
+		Unmodified: make([]*Repo, 0, len(combinedUnmodified)),
+		Deleted:    make([]*Repo, 0, len(combinedDeleted)),
+	}
+
+	for _, repo := range combinedDeleted {
+		combinedDiff.Deleted = append(combinedDiff.Deleted, repo)
+	}
+
+	for _, repo := range combinedModified {
+		combinedDiff.Modified = append(combinedDiff.Modified, repo)
+	}
+
+	for _, repo := range combinedAdded {
+		combinedDiff.Added = append(combinedDiff.Added, repo)
+	}
+
+	for _, repo := range combinedUnmodified {
+		combinedDiff.Unmodified = append(combinedDiff.Unmodified, repo)
+	}
+
+	if s.diffs != nil {
+		s.diffs <- combinedDiff
+	}
+
+	printDiff(combinedDiff)
+
+	keepIDs := keepIDsInDiff(combinedDiff)
+
+	if err = store.DeleteReposExcept(ctx, keepIDs...); err != nil {
+		return Diff{}, errors.Wrap(err, "syncer.streaming-sync.store.delete-repos-except")
+	}
+
+	err = errs.ErrorOrNil()
+
+	return combinedDiff, err
+}
+
+func keepIDsInDiff(d Diff) []uint32 {
+	toKeep := make(map[uint32]bool)
+
+	for _, repo := range d.Modified {
+		toKeep[repo.ID] = true
+	}
+	for _, repo := range d.Added {
+		toKeep[repo.ID] = true
+	}
+	for _, repo := range d.Unmodified {
+		toKeep[repo.ID] = true
+	}
+
+	keepIDs := []uint32{}
+	for id, keep := range toKeep {
+		if keep {
+			keepIDs = append(keepIDs, id)
+		}
+	}
+
+	return keepIDs
+}
+
+func printDiff(diff Diff) {
+	fmt.Printf("-- diff -- ")
+
+	fmt.Printf("\tdeleted (%d)=", len(diff.Deleted))
+	for _, repo := range diff.Deleted {
+		fmt.Printf("%q ", repo.Name)
+	}
+
+	fmt.Printf("\tmodified=")
+	for _, repo := range diff.Modified {
+		fmt.Printf("%q ", repo.Name)
+	}
+
+	fmt.Printf("\tadded=")
+	for _, repo := range diff.Added {
+		fmt.Printf("%q ", repo.Name)
+	}
+
+	fmt.Printf("\tunmodified=%d", len(diff.Unmodified))
+	fmt.Printf("\n")
+}
+
 // SyncSubset runs the syncer on a subset of the stored repositories. It will
 // only sync the repositories with the same name or external service spec as
 // sourcedSubset repositories.
@@ -351,6 +514,31 @@ func (s *Syncer) sourced(ctx context.Context) ([]*Repo, error) {
 	}
 
 	return repos, errs.ErrorOrNil()
+}
+
+func (s *Syncer) asyncSourced(ctx context.Context) (chan *SourceResult, error) {
+	svcs, err := s.store.ListExternalServices(ctx, StoreListExternalServicesArgs{})
+	if err != nil {
+		return nil, err
+	}
+
+	srcs, err := s.sourcer(svcs...)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make(chan *SourceResult)
+	done := make(chan struct{})
+	go func() {
+		srcs.ListRepos(ctx, results)
+		close(done)
+	}()
+	go func() {
+		<-done
+		close(results)
+	}()
+
+	return results, nil
 }
 
 func (s *Syncer) setOrResetLastSyncErr(perr *error) {

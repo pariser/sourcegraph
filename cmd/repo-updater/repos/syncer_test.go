@@ -21,10 +21,16 @@ import (
 	"github.com/sourcegraph/sourcegraph/pkg/extsvc/gitolite"
 )
 
+func TestSync_StreamingSync(t *testing.T) {
+	t.Parallel()
+
+	testSyncerSync(new(repos.FakeStore), true)(t)
+}
+
 func TestSyncer_Sync(t *testing.T) {
 	t.Parallel()
 
-	testSyncerSync(new(repos.FakeStore))(t)
+	testSyncerSync(new(repos.FakeStore), false)(t)
 
 	github := repos.ExternalService{ID: 1, Kind: "github"}
 	gitlab := repos.ExternalService{ID: 2, Kind: "gitlab"}
@@ -83,7 +89,7 @@ func TestSyncer_Sync(t *testing.T) {
 	}
 }
 
-func testSyncerSync(s repos.Store) func(*testing.T) {
+func testSyncerSync(s repos.Store, useStreaming bool) func(*testing.T) {
 	githubService := &repos.ExternalService{
 		ID:   1,
 		Kind: "GITHUB",
@@ -223,7 +229,7 @@ func testSyncerSync(s repos.Store) func(*testing.T) {
 	}
 
 	var testCases []testCase
-	for _, tc := range []struct {
+	for i, tc := range []struct {
 		repo *repos.Repo
 		svc  *repos.ExternalService
 	}{
@@ -235,6 +241,9 @@ func testSyncerSync(s repos.Store) func(*testing.T) {
 		{repo: gitoliteRepo, svc: gitoliteService},
 		{repo: bitbucketCloudRepo, svc: bitbucketCloudService},
 	} {
+		if i > 0 {
+			continue
+		}
 		svcdup := tc.svc.With(repos.Opt.ExternalServiceID(tc.svc.ID + 1))
 		testCases = append(testCases,
 			testCase{
@@ -585,7 +594,15 @@ func testSyncerSync(s repos.Store) func(*testing.T) {
 				}
 
 				syncer := repos.NewSyncer(st, tc.sourcer, nil, now)
-				diff, err := syncer.Sync(ctx)
+				var (
+					diff repos.Diff
+					err  error
+				)
+				if useStreaming {
+					diff, err = syncer.StreamingSync(ctx)
+				} else {
+					diff, err = syncer.Sync(ctx)
+				}
 
 				if have, want := fmt.Sprint(err), tc.err; have != want {
 					t.Errorf("have error %q, want %q", have, want)
