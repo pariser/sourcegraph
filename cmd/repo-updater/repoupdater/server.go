@@ -316,6 +316,7 @@ func (s *Server) handleExternalServiceSync(w http.ResponseWriter, r *http.Reques
 			// ignore if we took too long
 			err = nil
 		}
+		errch <- err
 	}()
 
 	select {
