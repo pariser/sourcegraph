@@ -162,6 +162,8 @@ func TestTokenize(t *testing.T) {
 		{`"\""`, []string{`"\""`}},
 		{`"\"" "\""`, []string{`"\""`, `"\""`}},
 		{`f:a "r:b"`, []string{`f:a`, `"r:b"`}},
+		{"//", []string{"//"}},
+		{"/**/", []string{"/**/"}},
 	}
 
 	for _, tc := range tcs {
