@@ -227,7 +227,6 @@ func TestGithubSource_ListRepos(t *testing.T) {
 				"github.com/gorilla/muxy",
 				"github.com/gorilla/i18n",
 				"github.com/gorilla/template",
-				"github.com/gorilla/.github",
 			}),
 			conf: &schema.GitHubConnection{
 				Url:   "https://github.com",
@@ -260,7 +259,6 @@ func TestGithubSource_ListRepos(t *testing.T) {
 				"github.com/gorilla/i18n",
 				"github.com/gorilla/template",
 				"github.com/golang-migrate/migrate",
-				"github.com/gorilla/.github",
 			}),
 			conf: &schema.GitHubConnection{
 				Url:   "https://github.com",
