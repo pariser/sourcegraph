@@ -3,6 +3,8 @@
 package query
 
 import (
+	"fmt"
+
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/pkg/search/query/syntax"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/pkg/search/query/types"
 )
@@ -96,6 +98,7 @@ func ParseAndCheck(input string) (*Query, error) {
 }
 
 func parseAndCheck(conf *types.Config, input string) (*Query, error) {
+	input = fmt.Sprintf(`%q`, input)
 	syntaxQuery, err := syntax.Parse(input)
 	if err != nil {
 		return nil, err
