@@ -213,15 +213,9 @@ func group(srcs []Source) map[string]Sources {
 
 func Drain(ctx context.Context, src Source) ([]*Repo, error) {
 	results := make(chan *SourceResult)
-	done := make(chan struct{})
 
 	go func() {
 		src.ListRepos(ctx, results)
-		close(done)
-	}()
-
-	go func() {
-		<-done
 		close(results)
 	}()
 
