@@ -142,3 +142,32 @@ func checkPanic(t *testing.T, msg string, f func()) {
 	}()
 	f()
 }
+
+func TestTokenize(t *testing.T) {
+	tcs := []struct {
+		input string
+		want  []string
+	}{
+		{"", nil},
+		{" ", nil},
+		{"a", []string{"a"}},
+		{" a", []string{"a"}},
+		{"a ", []string{"a"}},
+		{"a b", []string{"a", "b"}},
+		{`"`, []string{`"`}},
+		{`""`, []string{`""`}},
+		{`" " "`, []string{`" "`, `"`}},
+		{`" " " "`, []string{`" "`, `" "`}},
+		{`"\""`, []string{`"\""`}},
+		{`"\""`, []string{`"\""`}},
+		{`"\"" "\""`, []string{`"\""`, `"\""`}},
+		{`f:a "r:b"`, []string{`f:a`, `"r:b"`}},
+	}
+
+	for _, tc := range tcs {
+		toks := tokenize(tc.input)
+		if !reflect.DeepEqual(toks, tc.want) {
+			t.Errorf("tokenize(%q) = %q, want %q", tc.input, toks, tc.want)
+		}
+	}
+}
