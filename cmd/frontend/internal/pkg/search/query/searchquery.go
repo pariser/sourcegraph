@@ -4,6 +4,8 @@ package query
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/pkg/search/query/syntax"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/pkg/search/query/types"
@@ -98,7 +100,7 @@ func ParseAndCheck(input string) (*Query, error) {
 }
 
 func parseAndCheck(conf *types.Config, input string) (*Query, error) {
-	input = fmt.Sprintf(`%q`, input)
+	input = handlePatternType(input)
 	syntaxQuery, err := syntax.Parse(input)
 	if err != nil {
 		return nil, err
@@ -108,6 +110,59 @@ func parseAndCheck(conf *types.Config, input string) (*Query, error) {
 		return nil, err
 	}
 	return &Query{conf: conf, Query: checkedQuery}, nil
+}
+
+var fieldRx = regexp.MustCompile(`^-?[a-zA-Z]+:`)
+
+// handlePatternType returns a modified version of the input query where it has
+// been either quoted by default, quoted because it has patternType:literal, or
+// not quoted because it has patternType:regex.
+func handlePatternType(input string) string {
+	tokens := tokenize(input)
+	isRegex := false
+	var tokens2 []string
+	for _, t := range tokens {
+		switch t {
+		case "patternType:regex":
+			isRegex = true
+		case "patternType:literal":
+			isRegex = false
+		default:
+			tokens2 = append(tokens2, t)
+		}
+	}
+	if isRegex {
+		// Rebuild the input from the remaining tokens.
+		input = strings.Join(tokens2, " ")
+	} else {
+		// Sort the tokens into fields and non-fields.
+		var fields, nonFields []string
+		for _, t := range tokens2 {
+			if fieldRx.MatchString(t) {
+				fields = append(fields, t)
+			} else {
+				nonFields = append(nonFields, t)
+			}
+		}
+
+		// Rebuild the input as fields followed by non-fields quoted together.
+		var pieces []string
+		if len(fields) > 0 {
+			pieces = append(pieces, strings.Join(fields, " "))
+		}
+		if len(nonFields) > 0 {
+			quotedChunk := fmt.Sprintf("%q", strings.Join(nonFields, " "))
+			pieces = append(pieces, quotedChunk)
+		}
+		input = strings.Join(pieces, " ")
+	}
+	return input
+}
+
+var spaceRx = regexp.MustCompile(`\s+`)
+
+func tokenize(input string) []string {
+	return spaceRx.Split(input, -1)
 }
 
 // BoolValue returns the last boolean value (yes/no) for the field. For example, if the query is
