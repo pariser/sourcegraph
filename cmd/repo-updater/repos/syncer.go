@@ -329,7 +329,7 @@ func (s *Syncer) sourced(ctx context.Context) ([]*Repo, error) {
 	done := make(chan struct{})
 	go func() {
 		srcs.ListRepos(ctx, results)
-		done <- struct{}{}
+		close(done)
 	}()
 	go func() {
 		<-done

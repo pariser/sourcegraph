@@ -217,7 +217,7 @@ func Drain(ctx context.Context, src Source) ([]*Repo, error) {
 
 	go func() {
 		src.ListRepos(ctx, results)
-		done <- struct{}{}
+		close(done)
 	}()
 
 	go func() {
