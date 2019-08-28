@@ -8,7 +8,7 @@ import (
 )
 
 func TestCodemod_validateArgsNoRegex(t *testing.T) {
-	q, _ := query.ParseAndCheck("re.*gex")
+	q, _ := query.ParseAndCheck("patternType:regexp re.*gex")
 	_, err := validateQuery(q)
 	if err == nil {
 		t.Fatalf("Expected query %v to fail", q)

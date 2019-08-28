@@ -104,7 +104,7 @@ func TestSearchSuggestions(t *testing.T) {
 	})
 
 	t.Run("single term invalid regex", func(t *testing.T) {
-		sr, err := (&schemaResolver{}).Search(&struct{ Query string }{Query: "[foo"})
+		sr, err := (&schemaResolver{}).Search(&struct{ Query string }{Query: "patternType:regexp [foo"})
 		if err != nil {
 			t.Fatal(err)
 		}
