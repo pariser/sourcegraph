@@ -54,7 +54,7 @@ func TestHandlePatternType(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
-			out := handlePatternType(tc.input)
+			out := HandlePatternType(tc.input, false)
 			if out != tc.want {
 				t.Errorf("handlePatternType(%q) = %q, want %q", tc.input, out, tc.want)
 			}
