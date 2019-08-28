@@ -53,6 +53,9 @@ func TestHandlePatternType(t *testing.T) {
 		{`func lang:go main`, `lang:go "func  main"`},
 		// Searching for \n in literal mode brings back literal matches for backslash followed by n.
 		{`\n`, `"\\n"`},
+		{`\t`, `"\\t"`},
+		// Searching for a backslash should also bring back literal matches for backslashes.
+		{`\`, `"\\"`},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.input, func(t *testing.T) {
