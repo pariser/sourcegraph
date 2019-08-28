@@ -803,6 +803,8 @@ type Query {
     search(
         # The search query (such as "foo" or "repo:myrepo foo").
         query: String = ""
+
+        version: SearchVersion = V0
     ): Search
     # All saved searches configured for the current user, merged from all configurations.
     savedSearches: [SavedSearch!]!
@@ -831,6 +833,11 @@ type Query {
 
     # Look up a namespace by ID.
     namespace(id: ID!): Namespace
+}
+
+enum SearchVersion {
+    V0 # patternType defaults to regexp
+    V1 # patternType defaults to literal
 }
 
 # A query and an associated number of times it occurred.
