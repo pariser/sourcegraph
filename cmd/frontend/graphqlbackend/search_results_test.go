@@ -145,7 +145,7 @@ func TestSearchResults(t *testing.T) {
 		}
 		defer func() { mockSearchFilesInRepos = nil }()
 
-		testCallResults(t, `patternType:regexp foo\d "bar*"`, []string{"dir/file:123"})
+		testCallResults(t, `foo\d "bar*"`, []string{"dir/file:123"})
 		if !calledReposList {
 			t.Error("!calledReposList")
 		}
@@ -440,7 +440,6 @@ func TestSearchResolver_getPatternInfo(t *testing.T) {
 	}
 	for queryStr, want := range tests {
 		t.Run(queryStr, func(t *testing.T) {
-			queryStr = "patternType:regexp " + queryStr
 			query, err := query.ParseAndCheck(queryStr)
 			if err != nil {
 				t.Fatal(err)

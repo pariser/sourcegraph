@@ -72,7 +72,7 @@ func Test_proposedQuotedQueries(t *testing.T) {
 
 func Test_didYouMeanQuotedResolver_Results(t *testing.T) {
 	t.Run("regex error", func(t *testing.T) {
-		raw := "patternType:regexp *"
+		raw := "*"
 		_, err := query.ParseAndCheck(raw)
 		if err == nil {
 			t.Fatalf(`error returned from syntax.Parse("%s") is nil`, raw)
@@ -92,7 +92,7 @@ func Test_didYouMeanQuotedResolver_Results(t *testing.T) {
 	})
 
 	t.Run("type error that is not a regex error should show a suggestion", func(t *testing.T) {
-		raw := "patternType:regexp -foobar"
+		raw := "-foobar"
 		_, err := query.ParseAndCheck(raw)
 		if err == nil {
 			t.Fatalf(`error returned from syntax.Parse("%s") is nil`, raw)
@@ -105,11 +105,8 @@ func Test_didYouMeanQuotedResolver_Results(t *testing.T) {
 	})
 
 	t.Run("query parse error", func(t *testing.T) {
-		raw := "patternType:regexp :"
+		raw := ":"
 		_, err := query.ParseAndCheck(raw)
-		if err == nil {
-			t.Fatal("query unexpectedly had no error")
-		}
 		dymqr := didYouMeanQuotedResolver{query: raw, err: err}
 		srr, err := dymqr.Results(context.Background())
 		if err != nil {
