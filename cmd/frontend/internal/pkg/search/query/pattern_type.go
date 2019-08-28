@@ -11,11 +11,12 @@ import (
 var fieldRx = regexp.MustCompile(`^-?[a-zA-Z]+:`)
 
 // handlePatternType returns a modified version of the input query where it has
-// been either quoted by default, quoted because it has patternType:literal, or
-// not quoted because it has patternType:regex.
-func handlePatternType(input string) string {
+// been either quoted because it has patternType:literal, not quoted because it
+// has patternType:regex, or had whichever thing done to it in the default case
+// according to the defaultToRegexp parameter.
+func handlePatternType(input string, defaultToRegexp bool) string {
 	tokens := tokenize(input)
-	isRegex := false
+	isRegex := defaultToRegexp
 	var tokens2 []string
 	for _, t := range tokens {
 		switch t {

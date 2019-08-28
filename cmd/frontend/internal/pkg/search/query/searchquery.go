@@ -96,7 +96,6 @@ func ParseAndCheck(input string) (*Query, error) {
 }
 
 func parseAndCheck(conf *types.Config, input string) (*Query, error) {
-	input = handlePatternType(input)
 	syntaxQuery, err := syntax.Parse(input)
 	if err != nil {
 		return nil, err
