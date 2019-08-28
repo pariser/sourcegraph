@@ -155,10 +155,13 @@ func handlePatternType(input string) string {
 			pieces = append(pieces, strings.Join(fields, " "))
 		}
 		if len(nonFields) > 0 {
+			// Count up the number of non-whitespace tokens in the nonFields slice.
 			q := strings.Join(nonFields, "")
 			q = strings.TrimSpace(q)
 			quotedChunk := fmt.Sprintf(`"%s"`, strings.ReplaceAll(q, `"`, `\"`))
-			pieces = append(pieces, quotedChunk)
+			if quotedChunk != `""` {
+				pieces = append(pieces, quotedChunk)
+			}
 		}
 		input = strings.Join(pieces, " ")
 	}

@@ -149,8 +149,8 @@ func TestHandlePatternType(t *testing.T) {
 		want  string
 	}{
 		{"", ""},
-		{" ", `""`},
-		{"  ", `""`},
+		{" ", ""},
+		{"  ", ""},
 		{`a`, `"a"`},
 		{` a`, `"a"`},
 		{`a `, `"a"`},
@@ -166,6 +166,8 @@ func TestHandlePatternType(t *testing.T) {
 		{`:`, `":"`},
 		{"f:a", "f:a"},
 		{`"f:a"`, `"\"f:a\""`},
+		{"r:b r:c", "r:b r:c"},
+		{"r:b -r:c", "r:b -r:c"},
 		{"patternType:regex", ""},
 		{"patternType:regexp", ""},
 		{"patternType:literal", ""},
