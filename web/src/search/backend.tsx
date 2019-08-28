@@ -49,7 +49,7 @@ export function search(
             return queryGraphQL(
                 gql`
                     query Search($query: String!) {
-                        search(query: $query) {
+                        search(query: $query, version: V1) {
                             results {
                                 __typename
                                 limitHit
