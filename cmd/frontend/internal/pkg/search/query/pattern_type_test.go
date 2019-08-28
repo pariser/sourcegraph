@@ -77,6 +77,12 @@ func TestTokenize(t *testing.T) {
 		{"a b", []string{"a", " ", "b"}},
 		{`"`, []string{`"`}},
 		{`""`, []string{`""`}},
+		{`"""`, []string{`""`, `"`}},
+		{`""""`, []string{`""`, `""`}},
+		{`"""""`, []string{`""`, `""`, `"`}},
+		{`" ""`, []string{`" "`, `"`}},
+		{`" """`, []string{`" "`, `""`}},
+		{`" "" "`, []string{`" "`, `" "`}},
 		{`" " "`, []string{`" "`, " ", `"`}},
 		{`" " " "`, []string{`" "`, " ", `" "`}},
 		{`"\""`, []string{`"\""`}},
@@ -91,7 +97,7 @@ func TestTokenize(t *testing.T) {
 		t.Run(tc.input, func(t *testing.T) {
 			toks := tokenize(tc.input)
 			if !reflect.DeepEqual(toks, tc.want) {
-				t.Errorf("tokenize(%q) = %q, want %q", tc.input, toks, tc.want)
+				t.Errorf("tokenize(`%s`) = %s, want `%s`", tc.input, toks, tc.want)
 			}
 		})
 	}
