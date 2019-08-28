@@ -137,7 +137,7 @@ func handlePatternType(input string) string {
 	}
 	if isRegex {
 		// Rebuild the input from the remaining tokens.
-		input = strings.Join(tokens2, " ")
+		input = strings.TrimSpace(strings.Join(tokens2, ""))
 	} else {
 		// Sort the tokens into fields and non-fields.
 		var fields, nonFields []string
@@ -155,7 +155,9 @@ func handlePatternType(input string) string {
 			pieces = append(pieces, strings.Join(fields, " "))
 		}
 		if len(nonFields) > 0 {
-			quotedChunk := fmt.Sprintf("%q", strings.Join(nonFields, " "))
+			q := strings.Join(nonFields, "")
+			q = strings.TrimSpace(q)
+			quotedChunk := fmt.Sprintf(`"%s"`, strings.ReplaceAll(q, `"`, `\"`))
 			pieces = append(pieces, quotedChunk)
 		}
 		input = strings.Join(pieces, " ")
@@ -163,13 +165,13 @@ func handlePatternType(input string) string {
 	return input
 }
 
-// tokenize returns a slice of the double-quoted strings and contiguous chunks
-// of non-whitespace.
+// tokenize returns a slice of the double-quoted strings, contiguous chunks
+// of non-whitespace, and contiguous chunks of whitespace
 func tokenize(input string) []string {
 	var toks []string
 	s := Scanner{r: bufio.NewReader(strings.NewReader(input))}
 	for typ, t := s.Scan(); typ != EOF; typ, t = s.Scan() {
-		if typ == OTHER || typ == STRING {
+		if typ == OTHER || typ == STRING || typ == WS {
 			toks = append(toks, t)
 		}
 	}
