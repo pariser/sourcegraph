@@ -42,4 +42,5 @@
       "autoFix": true,
     },
   ],
+  "eslint.enable": true,
 }

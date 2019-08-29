@@ -518,9 +518,9 @@ export class Blob extends React.Component<BlobProps, BlobState> {
                                 />
                             )
                         })}
-                {isDiscussionsEnabled(this.props.settingsCascade) &&
-                    this.state.selectedPosition &&
-                    this.state.selectedPosition.line !== undefined && (
+                {this.state.selectedPosition &&
+                    this.state.selectedPosition.line !== undefined &&
+                    isDiscussionsEnabled(this.props.settingsCascade) && (
                         <DiscussionsGutterOverlay
                             overlayPosition={this.state.discussionsGutterOverlayPosition}
                             selectedPosition={this.state.selectedPosition}

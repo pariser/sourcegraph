@@ -1,6 +1,7 @@
 import 'focus-visible'
 
 import { ShortcutProvider } from '@slimsag/react-shortcuts'
+import 'focus-visible'
 import ServerIcon from 'mdi-react/ServerIcon'
 import * as React from 'react'
 import { hot } from 'react-hot-loader/root'
