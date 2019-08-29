@@ -1085,6 +1085,10 @@ type CodemodResult implements GenericSearchResultInterface {
     detail: Markdown!
     # A list of matches in this search result.
     matches: [SearchResultMatch!]!
+    # The commit whose contents the codemod was run against.
+    commit: GitCommit!
+    # The raw diff of the modification.
+    rawDiff: String!
 }
 
 # A search result that is a diff between two diffable Git objects.
@@ -1430,6 +1434,14 @@ type GitRefConnection {
 
 # The differences between two Git commits in a repository.
 type RepositoryComparison {
+    # The repository that is the base (left-hand side) of this comparison.
+    baseRepository: Repository!
+
+    # The repository that is the head (right-hand side) of this comparison. Cross-repository
+    # comparisons are not yet supported, so this is always equal to
+    # RepositoryComparison.baseRepository.
+    headRepository: Repository!
+
     # The range that this comparison represents.
     range: GitRevisionRange!
     # The commits in the comparison range, excluding the base and including the head.
