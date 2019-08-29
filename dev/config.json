@@ -6,7 +6,7 @@
   },
   "disablePublicRepoRedirects": true,
   "repoListUpdateInterval": 1,
-  "search.version": 0,
+  "search.version": "V0",
   "update.channel": "release",
   "auth.providers": [
     {
