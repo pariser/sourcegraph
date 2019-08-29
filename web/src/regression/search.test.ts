@@ -2,6 +2,36 @@ import * as path from 'path'
 import { saveScreenshotsUponFailuresAndClosePage } from '../../../shared/src/e2e/screenshotReporter'
 import { sourcegraphBaseUrl, createDriverForTest, Driver, gitHubToken } from '../../../shared/src/e2e/driver'
 import { regressionTestInit, createAndInitializeDriver } from './util'
+import { mutateGraphQL } from '../backend/graphql';
+import { gql } from '../../../shared/src/graphql/graphql';
+
+async function ensureSearchGitHubExternalServiceThroughAPI(driver: Driver) {
+    const input = `{
+        kind: 'github',
+        displayName: 'GitHub (search regression test)',
+        config: JSON.stringify({
+            url: 'https://github.com',
+            token: "TODO:token",
+            repos: ["TODO:reposlug"],
+            repositoryQuery: ['none'],
+        }),
+        ensureRepos: [repoSlugs[repoSlugs.length - 1]],
+    }`
+    return mutateGraphQL(
+        gql`
+            mutation addExternalService($input: AddExternalServiceInput!) {
+                addExternalService(input: $input) {
+                    id
+                    kind
+                    displayName
+                    warning
+                }
+            }
+        `,
+        { input }
+    )
+    // >>> use this instead of UI to ensure GitHub ext svc
+}
 
 async function ensureSearchGitHubExternalService(driver: Driver) {
     const repoSlugs = [
